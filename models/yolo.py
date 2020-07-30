@@ -3,7 +3,6 @@ from copy import deepcopy
 
 from models.experimental import *
 
-
 class Detect(nn.Module):
     def __init__(self, nc=80, anchors=()):  # detection layer
         super(Detect, self).__init__()
@@ -41,7 +40,6 @@ class Detect(nn.Module):
     def _make_grid(nx=20, ny=20):
         yv, xv = torch.meshgrid([torch.arange(ny), torch.arange(nx)])
         return torch.stack((xv, yv), 2).view((1, 1, ny, nx, 2)).float()
-
 
 class Model(nn.Module):
     def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None):  # model, input channels, number of classes
@@ -172,7 +170,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
                 pass
 
         n = max(round(n * gd), 1) if n > 1 else n  # depth gain
-        if m in [nn.Conv2d, Conv, Bottleneck, SPP, DWConv, MixConv2d, Focus, CrossConv, BottleneckCSP, C3]:
+        if m in [nn.Conv2d, Conv, Bottleneck, SPP, DWConv, MixConv2d, Focus, CrossConv, BottleneckCSP, C3,GhostBottleneck, MixConv2d]:
             c1, c2 = ch[f], args[0]
 
             # Normal
@@ -202,6 +200,13 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
             c2 = sum([ch[-1 if x == -1 else x + 1] for x in f])
         elif m is Detect:
             f = f or list(reversed([(-1 if j == i else j - 1) for j, x in enumerate(ch) if x == no]))
+
+        # 把通道数乘以因子
+        elif m is SElayer:
+            channel,re =args[0],args[1]
+            channel = make_divisible(channel*gw,8) if channel != no else channel
+            args = [channel,re]
+
         else:
             c2 = ch[f]
 

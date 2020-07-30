@@ -62,7 +62,7 @@ def train(hyp):
     batch_size = opt.batch_size  # 64
     weights = opt.weights  # initial training weights
 
-    # Configure
+    # Configure 载入图片路径
     init_seeds(1)
     with open(opt.data) as f:
         data_dict = yaml.load(f, Loader=yaml.FullLoader)  # model dict
@@ -80,6 +80,7 @@ def train(hyp):
 
     # Image sizes
     gs = int(max(model.stride))  # grid size (max stride)
+    # 确定训练和测试图片的尺寸
     imgsz, imgsz_test = [check_img_size(x, gs) for x in opt.img_size]  # verify imgsz are gs-multiples
 
     # Optimizer
@@ -107,6 +108,7 @@ def train(hyp):
     del pg0, pg1, pg2
 
     # Scheduler https://arxiv.org/pdf/1812.01187.pdf
+    # 定义学习率的变化趋势，这里采用consine learning rate decay.
     lf = lambda x: (((1 + math.cos(x * math.pi / epochs)) / 2) ** 1.0) * 0.9 + 0.1  # cosine
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
     # plot_lr_scheduler(optimizer, scheduler, epochs, save_dir=log_dir)

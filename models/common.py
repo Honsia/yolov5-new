@@ -12,7 +12,7 @@ def autopad(k, p=None):  # kernel, padding
 
 def DWConv(c1, c2, k=1, s=1, act=True):
     # Depthwise convolution
-    return Conv(c1, c2, k, s, g=math.gcd(c1, c2), act=act)
+    return Conv(c1, c2, k, s, g=math.gcd(c1, c2), act=act)  # math.gcd 返回c1,c2的最大公约数
 
 
 class Conv(nn.Module):
@@ -37,7 +37,7 @@ class Bottleneck(nn.Module):
         c_ = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
         self.cv2 = Conv(c_, c2, 3, 1, g=g)
-        self.add = shortcut and c1 == c2
+        self.add = shortcut and c1 == c2  #  输入输出通道拼接
 
     def forward(self, x):
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
@@ -94,6 +94,51 @@ class Concat(nn.Module):
 
     def forward(self, x):
         return torch.cat(x, self.d)
+
+
+class GhostConv(nn.Module):
+    # Ghost Convolution https://github.com/huawei-noah/ghostnet
+    def __init__(self, c1, c2, k=1, s=1, g=1, act=True):  # ch_in, ch_out, kernel, stride, groups
+        super(GhostConv, self).__init__()
+        c_ = c2 // 2  # hidden channels
+        self.cv1 = Conv(c1, c_, k, s, g, act)
+        self.cv2 = Conv(c_, c_, 5, 1, c_, act)
+
+    def forward(self, x):
+        y = self.cv1(x)
+        return torch.cat([y, self.cv2(y)], 1)
+
+
+class GhostBottleneck(nn.Module):
+    # Ghost Bottleneck https://github.com/huawei-noah/ghostnet
+    def __init__(self, c1, c2, k, s):
+        super(GhostBottleneck, self).__init__()
+        c_ = c2 // 2
+        self.conv = nn.Sequential(GhostConv(c1, c_, 1, 1),  # pw
+                                  DWConv(c_, c_, k, s, act=False) if s == 2 else nn.Identity(),  # dw
+                                  GhostConv(c_, c2, 1, 1, act=False))  # pw-linear
+        self.shortcut = nn.Sequential(DWConv(c1, c1, k, s, act=False),
+                                      Conv(c1, c2, 1, 1, act=False)) if s == 2 else nn.Identity()
+
+    def forward(self, x):
+        return self.conv(x) + self.shortcut(x)
+
+
+class SElayer(nn.Module):
+    def __init__(self,channel,reduction=16):
+        super.avg_pool = torch.nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channel,channel//reduction,bias = False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel//reduction,channel,bias = False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        b,c,_, = x.size()
+        y = self.avg_pool(x).view(b,c)
+        y = self.fc(y).view(b,c,1,1)
+        return x * y .expand_as(x)
 
 
 class Flatten(nn.Module):
